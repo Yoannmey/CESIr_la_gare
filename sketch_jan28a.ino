@@ -7,7 +7,16 @@ const char* ssid = "iPhone (9)";
 const char* password = "aaaaaaaa";
 const char* apiKey = "1a0b777d-c257-45ad-bdbd-dc3daa85bbc5";
 
-StaticJsonDocument<20000> doc;
+struct TrainInfo {
+  int hour;
+  int minute;
+  String type;
+  String direction;
+  bool isDeparture;
+};
+
+TrainInfo trains[100];
+int trainCount = 0;
 
 unsigned long lastHttpFetch = 0;
 unsigned long lastMinuteCheck = 0;
@@ -35,10 +44,7 @@ String buildUrl(String dateTime, String request) {
   return uri;
 }
 
-bool isNow(const char* dateTime, int h, int m) {
-  String dt = dateTime;
-  int th = dt.substring(9, 11).toInt();
-  int tm = dt.substring(11, 13).toInt();
+bool isNow(int h, int m, int th, int tm) {
   if (th != h) return false;
   return abs(tm - m) <= 1;
 }
@@ -50,7 +56,25 @@ void fetchJson() {
   http.addHeader("Authorization", apiKey);
   int code = http.GET();
   if (code == 200) {
+    StaticJsonDocument<20000> doc;
     deserializeJson(doc, http.getString());
+    trainCount = 0;
+    for (JsonObject dep : doc["departures"].as<JsonArray>()) {
+      const char* t = dep["stop_date_time"]["departure_date_time"];
+      const char* dir = dep["display_informations"]["direction"];
+      const char* type = dep["display_informations"]["commercial_mode"];
+      int th = String(t).substring(9,11).toInt();
+      int tm = String(t).substring(11,13).toInt();
+      trains[trainCount++] = {th, tm, String(type), String(dir), true};
+    }
+    for (JsonObject arr : doc["arrivals"].as<JsonArray>()) {
+      const char* t = arr["stop_date_time"]["arrival_date_time"];
+      const char* dir = arr["display_informations"]["direction"];
+      const char* type = arr["display_informations"]["commercial_mode"];
+      int th = String(t).substring(9,11).toInt();
+      int tm = String(t).substring(11,13).toInt();
+      trains[trainCount++] = {th, tm, String(type), String(dir), false};
+    }
   }
   http.end();
 }
@@ -61,22 +85,13 @@ void checkTrains() {
   int h = timeinfo.tm_hour;
   int m = timeinfo.tm_min;
 
-  for (JsonObject dep : doc["departures"].as<JsonArray>()) {
-    const char* t = dep["stop_date_time"]["departure_date_time"];
-    const char* dir = dep["display_informations"]["direction"];
-    const char* type = dep["display_informations"]["commercial_mode"];
-    if (isNow(t, h, m)) {
-     
-     // mettre le code en cas de départ
-    }
-  }
-
-  for (JsonObject arr : doc["arrivals"].as<JsonArray>()) {
-    const char* t = arr["stop_date_time"]["arrival_date_time"];
-    const char* dir = arr["display_informations"]["direction"];
-    const char* type = arr["display_informations"]["commercial_mode"];
-    if (isNow(t, h, m)) {
-      // mettre le code en cas d'arrivée en gare
+  for (int i = 0; i < trainCount; i++) {
+    if (isNow(h, m, trains[i].hour, trains[i].minute)) {
+      if (trains[i].isDeparture) {
+        // mettre le code en cas de départ
+      } else {
+        // mettre le code en cas d'arrivée en gare
+      }
     }
   }
 }
