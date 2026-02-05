@@ -16,6 +16,7 @@ struct TrainInfo {
 };
 
 TrainInfo trains[100];
+
 int trainCount = 0;
 
 unsigned long lastHttpFetch = 0;
@@ -51,6 +52,7 @@ bool isNow(int h, int m, int th, int tm) {
 
 void fetchJson() {
   HTTPClient http;
+
   String url = buildUrl(buildFromDatetime(), "departure");
   http.begin(url);
   http.addHeader("Authorization", apiKey);
@@ -63,17 +65,30 @@ void fetchJson() {
       const char* t = dep["stop_date_time"]["departure_date_time"];
       const char* dir = dep["display_informations"]["direction"];
       const char* type = dep["display_informations"]["commercial_mode"];
-      int th = String(t).substring(9,11).toInt();
-      int tm = String(t).substring(11,13).toInt();
+      int th = String(t).substring(9, 11).toInt();
+      int tm = String(t).substring(11, 13).toInt();
       trains[trainCount++] = {th, tm, String(type), String(dir), true};
     }
+  }
+  http.end();
+
+  // url = buildUrl(buildFromDatetime(), "arrival");
+  url = "https://api.sncf.com/v1/coverage/sncf/stop_areas/stop_area:SNCF:87474007/arrivals?from_datetime=20260205T190000&duration=3600";
+  http.begin(url);
+  http.addHeader("Authorization", apiKey);
+  code = http.GET();
+  if (code == 200) {
+    StaticJsonDocument<20000> doc;
+    deserializeJson(doc, http.getString());
     for (JsonObject arr : doc["arrivals"].as<JsonArray>()) {
       const char* t = arr["stop_date_time"]["arrival_date_time"];
-      const char* dir = arr["display_informations"]["direction"];
       const char* type = arr["display_informations"]["commercial_mode"];
-      int th = String(t).substring(9,11).toInt();
-      int tm = String(t).substring(11,13).toInt();
-      trains[trainCount++] = {th, tm, String(type), String(dir), false};
+      String dir = arr["display_informations"]["links"][0]["id"].as<const char*>();
+      String provenance = convertStopArea(dir.c_str());
+
+      int th = String(t).substring(9, 11).toInt();
+      int tm = String(t).substring(11, 13).toInt();
+      trains[trainCount++] = {th, tm, String(type), provenance, false};
     }
   }
   http.end();
@@ -88,30 +103,56 @@ void checkTrains() {
   for (int i = 0; i < trainCount; i++) {
     if (isNow(h, m, trains[i].hour, trains[i].minute)) {
       if (trains[i].isDeparture) {
-        // mettre le code en cas de départ
+        Serial.println("DEPART");
       } else {
-        // mettre le code en cas d'arrivée en gare
+        Serial.println("ARRIVEE");
       }
     }
   }
 }
 
+void displayTrains(){
+  for (int i = 0; i < trainCount; i++) {
+    Serial.print(trains[i].isDeparture);
+    Serial.print(" ");
+    Serial.print(trains[i].direction);
+    Serial.print(" ");
+    Serial.println(trains[i].type);
+  }
+}
+
+String convertStopArea(const char* stopArea){
+  if(strcmp(stopArea, "stop_area:SNCF:87474239") == 0) return "Landerneau";
+  if(strcmp(stopArea, "stop_area:SNCF:87474098") == 0) return "Quimper";
+  if(strcmp(stopArea, "stop_area:SNCF:87391003") == 0) return "Montparnasse";
+  if(strcmp(stopArea, "stop_area:SNCF:87474338") == 0) return "Morlaix";
+  if(strcmp(stopArea, "stop_area:SNCF:87471003") == 0) return "Rennes";
+  return String(stopArea);
+}
+
 void setup() {
+
   Serial.begin(9600);
+  trains[0].direction = "direction";
   WiFi.begin(ssid, password);
   while (WiFi.status() != WL_CONNECTED) delay(500);
   configTzTime("CET-1CEST,M3.5.0/02,M10.5.0/03", "pool.ntp.org", "time.nist.gov");
   fetchJson();
+  
 }
 
 void loop() {
   unsigned long now = millis();
-  if (now - lastHttpFetch >= HTTP_INTERVAL) {
+  if (now - lastHttpFetch >= HTTP_INTERVAL || trains[0].direction == "direction") {
     lastHttpFetch = now;
     fetchJson();
   }
   if (now - lastMinuteCheck >= MINUTE_INTERVAL) {
+    Serial.println("DEBUT");
     lastMinuteCheck = now;
     checkTrains();
+    Serial.println("FIN");
   }
+
+   displayTrains();
 }
