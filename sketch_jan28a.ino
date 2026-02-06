@@ -146,7 +146,8 @@ void checkTrains() {
   int h = timeinfo.tm_hour;
   int m = timeinfo.tm_min;
   for (int i = 0; i < trainCount; i++) {
-    if (isNow(h, m, trains[i].hour, trains[i].minute)) {
+    // if (isNow(h, m, trains[i].hour, trains[i].minute)) {
+      if(true){
       digitalWrite(LED2, HIGH);
       delay(5000);
       player.play(JINGLE);
@@ -312,9 +313,19 @@ void setup() {
     player.volume(25);
   }
 
-   testMateriel();
-   fetchJson();
-   displayTrains();
+  //  testMateriel();
+  //  fetchJson();
+  //  displayTrains();
+
+  int th = 17;
+  int tm = 01;
+  trains[0] = { th, tm, "TGV INOUI", "Morlaix", true };
+  trainCount++;
+  displayTrains();
+  checkTrains();
+  trains[0] = { th, tm, "TER", "Montparnasse", false };
+  trainCount++;
+  checkTrains();
 }
 
 void loop() {
